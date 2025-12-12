@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="permissionx_access_background_location">后台访问位置信息</string>
+    <string name="permissionx_body_sensor_background">后台访问身体传感器</string>
+    <string name="permissionx_manage_external_storage">所有文件访问权限</string>
+    <string name="permissionx_post_notification">通知</string>
+    <string name="permissionx_request_install_packages">安装未知应用</string>
+    <string name="permissionx_system_alert_window">显示在其他应用的上层</string>
+    <string name="permissionx_write_settings">修改系统设置</string>
+</resources>

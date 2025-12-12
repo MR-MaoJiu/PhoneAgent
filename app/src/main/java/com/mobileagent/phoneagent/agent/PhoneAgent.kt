@@ -387,10 +387,16 @@ class PhoneAgent(
 
         // 解析操作
         Log.d(TAG, "解析操作指令...")
-        Log.d(TAG, "原始响应: ${modelResponse.action}")
+        Log.d(TAG, "原始响应（完整）: ${modelResponse.action}")
+        Log.d(TAG, "原始响应长度: ${modelResponse.action.length}")
         val actionJson = try {
             val parsed = parseActionFromResponse(modelResponse.action)
             Log.d(TAG, "✅ 操作解析成功: $parsed")
+            // 验证解析结果是否包含必要字段
+            val parsedJson = org.json.JSONObject(parsed)
+            if (parsedJson.optString("action") == "Tap" && !parsedJson.has("element")) {
+                Log.e(TAG, "❌ 警告：Tap 操作缺少 element 坐标！原始响应: ${modelResponse.action.take(500)}")
+            }
             parsed
         } catch (e: Exception) {
             Log.e(TAG, "❌ 解析操作失败", e)
@@ -846,17 +852,41 @@ class PhoneAgent(
                     // 根据不同的 action 解析参数
                     when (action) {
                         "Tap", "Click" -> {
-                            // 支持数组格式: element=[x,y]
-                            var elementMatch = """element=\[(\d+),\s*(\d+)\]""".toRegex().find(code)
-                            // 支持字符串格式: element="x, y"
-                            if (elementMatch == null) {
-                                elementMatch = """element=["'](\d+),\s*(\d+)["']""".toRegex().find(code)
-                            }
-                            if (elementMatch != null) {
+                            // 支持多种格式：
+                            // 1. element=[x,y] - 2个数字（中心点坐标）
+                            // 2. element=[x1,y1,x2,y2] - 4个数字（边界框，需要计算中心点）
+                            // 3. element="x, y" - 字符串格式
+                            
+                            // 先尝试匹配4个数字的边界框格式 [xmin, ymin, xmax, ymax]
+                            var elementMatch4 = """element=\[(\d+),\s*(\d+),\s*(\d+),\s*(\d+)\]""".toRegex().find(code)
+                            if (elementMatch4 != null) {
+                                // 边界框格式：计算中心点
+                                val x1 = elementMatch4.groupValues[1].toInt()
+                                val y1 = elementMatch4.groupValues[2].toInt()
+                                val x2 = elementMatch4.groupValues[3].toInt()
+                                val y2 = elementMatch4.groupValues[4].toInt()
+                                val centerX = (x1 + x2) / 2
+                                val centerY = (y1 + y2) / 2
+                                Log.d(TAG, "检测到边界框格式: [$x1,$y1,$x2,$y2] -> 中心点: ($centerX, $centerY)")
                                 json.put("element", org.json.JSONArray().apply {
-                                    put(elementMatch.groupValues[1].toInt())
-                                    put(elementMatch.groupValues[2].toInt())
+                                    put(centerX)
+                                    put(centerY)
                                 })
+                            } else {
+                                // 尝试匹配2个数字的中心点格式 [x, y]
+                                var elementMatch = """element=\[(\d+),\s*(\d+)\]""".toRegex().find(code)
+                                // 支持字符串格式: element="x, y"
+                                if (elementMatch == null) {
+                                    elementMatch = """element=["'](\d+),\s*(\d+)["']""".toRegex().find(code)
+                                }
+                                if (elementMatch != null) {
+                                    json.put("element", org.json.JSONArray().apply {
+                                        put(elementMatch.groupValues[1].toInt())
+                                        put(elementMatch.groupValues[2].toInt())
+                                    })
+                                } else {
+                                    Log.w(TAG, "⚠️ 未找到 element 坐标，原始代码: ${code.take(200)}")
+                                }
                             }
                             // 统一使用 "Tap"
                             json.put("action", "Tap")
